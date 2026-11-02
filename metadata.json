@@ -1,0 +1,8 @@
+{
+  "name": "Synthetix AI Chatbot",
+  "description": "Fast, modern, and responsive AI chatbot powered by Google Gemini with real-time streaming, chat history, and full CRUD conversation management.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
