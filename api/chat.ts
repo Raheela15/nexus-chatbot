@@ -1,6 +1,19 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { GoogleGenAI, ThinkingLevel } from '@google/genai';
 
+/**
+ * Sanitizes an API key by stripping wrapping quotes, backticks, and whitespace.
+ * Users frequently copy keys from .env files with quotes like "AIzaSy...",
+ * which Vercel stores literally, causing Google APIs to reject with API_KEY_INVALID.
+ */
+function sanitizeApiKey(raw: string | undefined): string {
+  if (!raw) return '';
+  return raw
+    .trim()
+    .replace(/^["'`\s]+|["'`\s]+$/g, '')
+    .trim();
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // CORS Headers
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -15,11 +28,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: 'Method Not Allowed. Please use POST.' });
   }
 
-  const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || '';
+  const rawKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || '';
+  const apiKey = sanitizeApiKey(rawKey);
 
   if (!apiKey || apiKey === 'MY_GEMINI_API_KEY') {
     return res.status(500).json({
-      error: 'Gemini API key is not configured. Please add GEMINI_API_KEY to your Vercel Project Settings > Environment Variables, then redeploy.',
+      error: 'Gemini API key is not configured. Please add GEMINI_API_KEY in your Vercel Project Settings > Environment Variables, without quotes, then redeploy.',
     });
   }
 
@@ -55,7 +69,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     ? ['gemini-3.1-flash-lite', 'gemini-3.8-flash']
     : ['gemini-3.8-flash', 'gemini-3.1-flash-lite'];
 
-  // Streaming SSE Mode (if client requested stream)
+  // Streaming SSE Mode
   if (stream) {
     res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
     res.setHeader('Cache-Control', 'no-cache, no-transform');
@@ -98,7 +112,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.end();
   }
 
-  // Standard JSON Mode (optimal for Vercel serverless functions)
+  // Standard JSON Mode
   let lastError: any = null;
   for (const candidate of modelsToTry) {
     try {
@@ -121,11 +135,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     } catch (err: any) {
       lastError = err;
-      console.warn(`Vercel model ${candidate} failed:`, err.message || err);
+      console.warn(`Vercel model ${candidate} error:`, err.message || err);
+    }
+  }
+
+  // Parse error nicely if it's an API Key or Google error
+  let friendlyMsg = 'Failed to generate response from Gemini API.';
+  const rawMsg = lastError?.message || '';
+
+  if (rawMsg.includes('API_KEY_INVALID') || rawMsg.includes('API key not valid')) {
+    friendlyMsg =
+      'Invalid Gemini API Key. Please check your Vercel Project Settings > Environment Variables, and ensure GEMINI_API_KEY is pasted as pure text without quotes (e.g. AIzaSy... NOT "AIzaSy...").';
+  } else if (rawMsg.includes('RESOURCE_EXHAUSTED') || rawMsg.includes('Quota exceeded')) {
+    friendlyMsg = 'Gemini API quota exceeded. Please wait a moment or check your Google AI Studio plan.';
+  } else if (rawMsg) {
+    try {
+      const parsed = JSON.parse(rawMsg);
+      friendlyMsg = parsed?.error?.message || rawMsg;
+    } catch {
+      friendlyMsg = rawMsg;
     }
   }
 
   return res.status(500).json({
-    error: lastError?.message || 'Failed to generate response from Gemini API. Please check your GEMINI_API_KEY.',
+    error: friendlyMsg,
   });
 }

@@ -28,7 +28,8 @@ async function startServer() {
     next();
   });
 
-  const apiKey = process.env.GEMINI_API_KEY || '';
+  const rawKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || '';
+  const apiKey = rawKey.trim().replace(/^["'`\s]+|["'`\s]+$/g, '').trim();
   const ai = new GoogleGenAI({
     apiKey: apiKey,
     httpOptions: {

@@ -191,6 +191,12 @@ export function useChat() {
           if (contentType.includes('application/json')) {
             const errJson = await response.json();
             errorMsg = errJson.error || errJson.message || '';
+            if (typeof errorMsg === 'string' && errorMsg.startsWith('{')) {
+              try {
+                const inner = JSON.parse(errorMsg);
+                errorMsg = inner?.error?.message || errorMsg;
+              } catch {}
+            }
           } else {
             const text = await response.text();
             if (text && text.length < 200 && !text.includes('<!DOCTYPE')) {
@@ -201,13 +207,18 @@ export function useChat() {
           // ignore parse errors
         }
 
+        if (errorMsg.includes('API_KEY_INVALID') || errorMsg.includes('API key not valid')) {
+          errorMsg =
+            'Invalid Gemini API key. If deployed on Vercel, please check Project Settings > Environment Variables and ensure GEMINI_API_KEY is pasted without quotes (e.g. AIzaSy... NOT "AIzaSy...").';
+        }
+
         if (!errorMsg) {
           if (response.status === 404) {
             errorMsg =
-              'HTTP 404: API route not found. On Vercel, make sure api/chat.ts is included and GEMINI_API_KEY is added to Vercel Environment Variables.';
+              'HTTP 404: API route not found. On Vercel, make sure the latest api/chat.ts is deployed and GEMINI_API_KEY is added to Vercel Environment Variables.';
           } else if (response.status === 500) {
             errorMsg =
-              'HTTP 500: Server error. Please check that GEMINI_API_KEY is set in Vercel Project Settings > Environment Variables.';
+              'HTTP 500: Server error. Please check that GEMINI_API_KEY is configured in Vercel Project Settings > Environment Variables without quotes.';
           } else {
             errorMsg = `Server responded with status ${response.status}.`;
           }
