@@ -1,380 +1,348 @@
 import React, { useState, useMemo } from 'react';
 import {
-  MessageSquare,
   Plus,
+  MessageSquare,
+  Search,
   Trash2,
   Edit2,
   Check,
   X,
-  Search,
-  Download,
-  Upload,
-  Sparkles,
   Settings,
-  ChevronLeft,
-  ChevronRight,
+  Sparkles,
+  Sun,
+  Moon,
+  Bot,
 } from 'lucide-react';
 import { Conversation } from '../types/chat';
 
 interface SidebarProps {
   conversations: Conversation[];
-  activeConversationId: string | null;
+  activeId: string | null;
   onSelectConversation: (id: string) => void;
-  onNewConversation: () => void;
+  onNewChat: () => void;
   onRenameConversation: (id: string, newTitle: string) => void;
   onDeleteConversation: (id: string) => void;
-  onClearAll: () => void;
+  onOpenClearModal: () => void;
   onOpenSettings: () => void;
-  onExport: () => void;
-  onImport: () => void;
   isOpen: boolean;
+  onToggleOpen: () => void;
+  isMobileOpen: boolean;
   onCloseMobile: () => void;
+  resolvedTheme: 'light' | 'dark';
+  onToggleTheme: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
   conversations,
-  activeConversationId,
+  activeId,
   onSelectConversation,
-  onNewConversation,
+  onNewChat,
   onRenameConversation,
   onDeleteConversation,
-  onClearAll,
+  onOpenClearModal,
   onOpenSettings,
-  onExport,
-  onImport,
   isOpen,
+  onToggleOpen,
+  isMobileOpen,
   onCloseMobile,
+  resolvedTheme,
+  onToggleTheme,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
-  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
-  // Filter conversations by title or messages
+  // Filter conversations by search
   const filteredConversations = useMemo(() => {
     if (!searchQuery.trim()) return conversations;
-    const query = searchQuery.toLowerCase();
+    const q = searchQuery.toLowerCase();
     return conversations.filter(
       (c) =>
-        c.title.toLowerCase().includes(query) ||
-        c.messages.some((m) => m.content.toLowerCase().includes(query))
+        c.title.toLowerCase().includes(q) ||
+        c.messages.some((m) => m.content.toLowerCase().includes(q))
     );
   }, [conversations, searchQuery]);
 
-  // Group conversations by time
+  // Group conversations by relative time
   const groupedConversations = useMemo(() => {
+    const today: Conversation[] = [];
+    const yesterday: Conversation[] = [];
+    const pastWeek: Conversation[] = [];
+    const older: Conversation[] = [];
+
     const now = new Date();
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
     const oneDayMs = 24 * 60 * 60 * 1000;
     const startOfYesterday = startOfToday - oneDayMs;
-    const startOfLast7Days = startOfToday - 7 * oneDayMs;
-
-    const groups: { [key: string]: Conversation[] } = {
-      Today: [],
-      Yesterday: [],
-      'Previous 7 Days': [],
-      Older: [],
-    };
+    const startOfPastWeek = startOfToday - 7 * oneDayMs;
 
     filteredConversations.forEach((conv) => {
       const time = conv.updatedAt || conv.createdAt;
       if (time >= startOfToday) {
-        groups.Today.push(conv);
+        today.push(conv);
       } else if (time >= startOfYesterday) {
-        groups.Yesterday.push(conv);
-      } else if (time >= startOfLast7Days) {
-        groups['Previous 7 Days'].push(conv);
+        yesterday.push(conv);
+      } else if (time >= startOfPastWeek) {
+        pastWeek.push(conv);
       } else {
-        groups.Older.push(conv);
+        older.push(conv);
       }
     });
 
-    return Object.entries(groups).filter(([_, items]) => items.length > 0);
+    return [
+      { label: 'Today', items: today },
+      { label: 'Yesterday', items: yesterday },
+      { label: 'Previous 7 Days', items: pastWeek },
+      { label: 'Older', items: older },
+    ].filter((group) => group.items.length > 0);
   }, [filteredConversations]);
 
-  const startEditing = (conv: Conversation, e: React.MouseEvent) => {
+  const handleStartRename = (conv: Conversation, e: React.MouseEvent) => {
     e.stopPropagation();
     setEditingId(conv.id);
     setEditTitle(conv.title);
   };
 
-  const saveEditing = (id: string, e?: React.FormEvent) => {
-    if (e) e.preventDefault();
+  const handleSaveRename = (id: string, e: React.MouseEvent | React.FormEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
     if (editTitle.trim()) {
       onRenameConversation(id, editTitle.trim());
     }
     setEditingId(null);
-    setEditTitle('');
   };
 
-  const cancelEditing = (e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
-    setEditingId(null);
-    setEditTitle('');
-  };
-
-  const handleDeleteClick = (id: string, e: React.MouseEvent) => {
+  const handleCancelRename = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (deleteConfirmId === id) {
-      onDeleteConversation(id);
-      setDeleteConfirmId(null);
-    } else {
-      setDeleteConfirmId(id);
-      setTimeout(() => {
-        setDeleteConfirmId((prev) => (prev === id ? null : prev));
-      }, 4000);
-    }
+    setEditingId(null);
   };
 
-  return (
-    <>
-      {/* Mobile Backdrop */}
-      {isOpen && (
-        <div
-          className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm lg:hidden"
-          onClick={onCloseMobile}
-        />
-      )}
-
-      {/* Sidebar Container */}
-      <aside
-        className={`fixed lg:static top-0 bottom-0 left-0 z-50 flex flex-col w-72 bg-[#121215] border-r border-[#27272a] transition-transform duration-200 ease-in-out ${
-          isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
-        }`}
-      >
-        {/* Header / Brand */}
-        <div className="p-4 border-b border-[#27272a]/70 flex items-center justify-between">
+  const sidebarContent = (
+    <div className="flex flex-col h-full bg-zinc-950 text-zinc-200 border-r border-zinc-800/80 w-72 select-none">
+      {/* Brand & New Chat Header */}
+      <div className="p-4 border-b border-zinc-800 space-y-3.5">
+        <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-[#6366f1] via-[#4f46e5] to-[#3b82f6] flex items-center justify-center text-white shadow-md shadow-[#6366f1]/20">
-              <Sparkles className="w-4 h-4" />
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-indigo-500 via-purple-500 to-pink-500 p-0.5 shadow-md shadow-indigo-500/20">
+              <div className="w-full h-full bg-zinc-950 rounded-[10px] flex items-center justify-center">
+                <Sparkles className="w-4 h-4 text-indigo-400" />
+              </div>
             </div>
             <div>
-              <h1 className="font-semibold text-sm tracking-tight text-[#f4f4f5]">Synthetix AI</h1>
-              <p className="text-[11px] text-amber-400 font-mono flex items-center gap-1">
-                <span>⚡</span>
-                <span>Gemini 3.1 Flash Lite</span>
-              </p>
-            </div>
-          </div>
-
-          <button
-            onClick={onCloseMobile}
-            className="lg:hidden p-1.5 rounded-lg text-[#a1a1aa] hover:text-white hover:bg-[#27272a]"
-            title="Close sidebar"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        {/* Action: New Chat Button (Create) */}
-        <div className="p-3">
-          <button
-            onClick={() => {
-              onNewConversation();
-              onCloseMobile();
-            }}
-            className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-[#6366f1] hover:bg-[#4f46e5] text-white text-xs font-semibold shadow-md shadow-[#6366f1]/20 transition-all duration-150 active:scale-[0.98]"
-          >
-            <span className="flex items-center gap-2">
-              <Plus className="w-4 h-4" />
-              <span>New Conversation</span>
-            </span>
-            <span className="text-[10px] bg-white/20 px-1.5 py-0.5 rounded font-mono">
-              +
-            </span>
-          </button>
-        </div>
-
-        {/* Search Conversations Input */}
-        <div className="px-3 pb-2">
-          <div className="relative">
-            <Search className="w-3.5 h-3.5 text-[#71717a] absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search conversations..."
-              className="w-full bg-[#18181b] border border-[#27272a] rounded-lg pl-8 pr-7 py-1.5 text-xs text-[#f4f4f5] placeholder-[#71717a] focus:outline-none focus:border-[#6366f1]"
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery('')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#71717a] hover:text-[#f4f4f5]"
-              >
-                <X className="w-3 h-3" />
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Conversation List (Read, Update, Delete) */}
-        <div className="flex-1 overflow-y-auto px-2 space-y-4 py-2">
-          {conversations.length === 0 ? (
-            <div className="text-center py-10 px-4 text-xs text-[#71717a]">
-              <MessageSquare className="w-8 h-8 mx-auto mb-2 text-[#3f3f46]" />
-              <p>No conversations yet</p>
-              <p className="text-[11px] text-[#52525b] mt-1">
-                Start a chat to save your history
-              </p>
-            </div>
-          ) : filteredConversations.length === 0 ? (
-            <div className="text-center py-8 px-4 text-xs text-[#71717a]">
-              <p>No chats match &quot;{searchQuery}&quot;</p>
-            </div>
-          ) : (
-            groupedConversations.map(([groupName, items]) => (
-              <div key={groupName} className="space-y-1">
-                <div className="px-3 text-[11px] font-semibold text-[#71717a] uppercase tracking-wider font-mono">
-                  {groupName}
-                </div>
-
-                <div className="space-y-0.5">
-                  {items.map((conv) => {
-                    const isActive = conv.id === activeConversationId;
-                    const isEditing = conv.id === editingId;
-                    const isConfirmingDelete = conv.id === deleteConfirmId;
-
-                    return (
-                      <div
-                        key={conv.id}
-                        onClick={() => {
-                          onSelectConversation(conv.id);
-                          onCloseMobile();
-                        }}
-                        className={`group relative flex items-center justify-between px-3 py-2 rounded-xl text-xs cursor-pointer transition-colors duration-150 ${
-                          isActive
-                            ? 'bg-[#1e1e24] text-[#f4f4f5] font-medium border border-[#3f3f46]/70 shadow-sm'
-                            : 'text-[#a1a1aa] hover:bg-[#18181b] hover:text-[#f4f4f5]'
-                        }`}
-                      >
-                        {/* Conversation Title / Edit form */}
-                        <div className="flex items-center gap-2.5 min-w-0 flex-1 mr-2">
-                          <MessageSquare
-                            className={`w-3.5 h-3.5 flex-shrink-0 ${
-                              isActive ? 'text-[#818cf8]' : 'text-[#71717a]'
-                            }`}
-                          />
-
-                          {isEditing ? (
-                            <form
-                              onSubmit={(e) => saveEditing(conv.id, e)}
-                              onClick={(e) => e.stopPropagation()}
-                              className="flex items-center gap-1 w-full"
-                            >
-                              <input
-                                type="text"
-                                value={editTitle}
-                                onChange={(e) => setEditTitle(e.target.value)}
-                                autoFocus
-                                className="w-full bg-[#27272a] text-[#f4f4f5] text-xs px-2 py-0.5 rounded border border-[#6366f1] focus:outline-none"
-                              />
-                              <button
-                                type="submit"
-                                className="p-1 text-emerald-400 hover:bg-[#27272a] rounded"
-                                title="Save"
-                              >
-                                <Check className="w-3.5 h-3.5" />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={cancelEditing}
-                                className="p-1 text-red-400 hover:bg-[#27272a] rounded"
-                                title="Cancel"
-                              >
-                                <X className="w-3.5 h-3.5" />
-                              </button>
-                            </form>
-                          ) : (
-                            <span className="truncate" title={conv.title}>
-                              {conv.title}
-                            </span>
-                          )}
-                        </div>
-
-                        {/* Action buttons (Rename & Delete) */}
-                        {!isEditing && (
-                          <div
-                            className={`flex items-center gap-1 ${
-                              isActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-                            } transition-opacity flex-shrink-0`}
-                          >
-                            <button
-                              onClick={(e) => startEditing(conv, e)}
-                              className="p-1 text-[#71717a] hover:text-[#f4f4f5] hover:bg-[#27272a] rounded"
-                              title="Rename chat"
-                            >
-                              <Edit2 className="w-3 h-3" />
-                            </button>
-
-                            <button
-                              onClick={(e) => handleDeleteClick(conv.id, e)}
-                              className={`p-1 rounded transition-colors ${
-                                isConfirmingDelete
-                                  ? 'text-red-400 bg-red-950/60 font-semibold px-1.5'
-                                  : 'text-[#71717a] hover:text-red-400 hover:bg-[#27272a]'
-                              }`}
-                              title={isConfirmingDelete ? 'Click again to confirm delete' : 'Delete chat'}
-                            >
-                              {isConfirmingDelete ? (
-                                <span className="text-[10px]">Delete?</span>
-                              ) : (
-                                <Trash2 className="w-3 h-3" />
-                              )}
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
+              <div className="flex items-center gap-1.5">
+                <h2 className="text-sm font-bold text-white tracking-tight">
+                  Gemini Chat
+                </h2>
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" title="API Ready" />
               </div>
-            ))
-          )}
-        </div>
-
-        {/* Sidebar Footer */}
-        <div className="p-3 border-t border-[#27272a] bg-[#0e0e11] space-y-1.5">
-          <div className="flex items-center justify-between text-xs text-[#71717a] px-1 pb-1">
-            <span>{conversations.length} {conversations.length === 1 ? 'chat' : 'chats'}</span>
-            <div className="flex items-center gap-1.5">
-              <button
-                onClick={onExport}
-                className="p-1 text-[#a1a1aa] hover:text-white rounded hover:bg-[#18181b]"
-                title="Export chats JSON"
-              >
-                <Download className="w-3.5 h-3.5" />
-              </button>
-              <button
-                onClick={onImport}
-                className="p-1 text-[#a1a1aa] hover:text-white rounded hover:bg-[#18181b]"
-                title="Import chats JSON"
-              >
-                <Upload className="w-3.5 h-3.5" />
-              </button>
+              <p className="text-[11px] text-zinc-400 font-medium">Free Tier AI Engine</p>
             </div>
           </div>
 
           <button
-            onClick={onOpenSettings}
-            className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs text-[#a1a1aa] hover:text-[#f4f4f5] hover:bg-[#18181b] transition-colors"
+            onClick={onToggleTheme}
+            className="p-2 rounded-xl text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors cursor-pointer"
+            title={`Switch to ${resolvedTheme === 'dark' ? 'Light' : 'Dark'} mode`}
           >
-            <span className="flex items-center gap-2">
-              <Settings className="w-3.5 h-3.5" />
-              <span>Persona & Settings</span>
-            </span>
+            {resolvedTheme === 'dark' ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4" />}
           </button>
+        </div>
 
-          {conversations.length > 0 && (
+        {/* New Chat Button */}
+        <button
+          onClick={() => {
+            onNewChat();
+            onCloseMobile();
+          }}
+          className="w-full flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 via-indigo-500 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs font-semibold shadow-md shadow-indigo-600/20 active:scale-[0.98] transition-all cursor-pointer"
+        >
+          <Plus className="w-4 h-4 stroke-[2.5]" />
+          <span>New Conversation</span>
+        </button>
+
+        {/* Search input */}
+        <div className="relative">
+          <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search conversations..."
+            className="w-full pl-8 pr-7 py-2 bg-zinc-900/90 border border-zinc-800 rounded-xl text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-indigo-500/80 focus:border-indigo-500/80 transition-all"
+          />
+          {searchQuery && (
             <button
-              onClick={onClearAll}
-              className="w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs text-[#71717a] hover:text-red-400 hover:bg-red-950/20 transition-colors"
+              onClick={() => setSearchQuery('')}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 cursor-pointer"
             >
-              <Trash2 className="w-3.5 h-3.5" />
-              <span>Clear all chats</span>
+              <X className="w-3 h-3" />
             </button>
           )}
         </div>
+      </div>
+
+      {/* Conversation List */}
+      <div className="flex-1 overflow-y-auto px-2.5 py-3 space-y-4">
+        {groupedConversations.length === 0 ? (
+          <div className="text-center py-12 px-4 space-y-2">
+            <div className="w-10 h-10 rounded-2xl bg-zinc-900 flex items-center justify-center mx-auto text-zinc-600">
+              <Bot className="w-5 h-5" />
+            </div>
+            <p className="text-xs text-zinc-400 font-medium">
+              {searchQuery ? 'No matching conversations' : 'No chats yet'}
+            </p>
+            <p className="text-[11px] text-zinc-600">
+              {searchQuery ? 'Try a different search word' : 'Start your first chat above!'}
+            </p>
+          </div>
+        ) : (
+          groupedConversations.map((group) => (
+            <div key={group.label} className="space-y-1">
+              <div className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-zinc-500">
+                {group.label}
+              </div>
+              {group.items.map((conv) => {
+                const isActive = conv.id === activeId;
+                const isEditingThis = editingId === conv.id;
+
+                return (
+                  <div
+                    key={conv.id}
+                    onClick={() => {
+                      if (!isEditingThis) {
+                        onSelectConversation(conv.id);
+                        onCloseMobile();
+                      }
+                    }}
+                    className={`group relative flex items-center justify-between px-3 py-2.5 rounded-xl text-xs cursor-pointer transition-all ${
+                      isActive
+                        ? 'bg-zinc-800 text-white font-medium shadow-sm border border-indigo-500/30'
+                        : 'text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                      <div className={`p-1 rounded-lg ${isActive ? 'bg-indigo-500/20 text-indigo-400' : 'text-zinc-500'}`}>
+                        <MessageSquare className="w-3.5 h-3.5" />
+                      </div>
+                      {isEditingThis ? (
+                        <form
+                          onSubmit={(e) => handleSaveRename(conv.id, e)}
+                          className="flex items-center gap-1 flex-1 min-w-0"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <input
+                            type="text"
+                            value={editTitle}
+                            onChange={(e) => setEditTitle(e.target.value)}
+                            autoFocus
+                            className="w-full bg-zinc-950 text-white px-2 py-1 rounded-md border border-indigo-500 text-xs focus:outline-none"
+                          />
+                          <button
+                            type="submit"
+                            className="p-1 hover:text-emerald-400 text-zinc-400"
+                            title="Save"
+                          >
+                            <Check className="w-3 h-3" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleCancelRename}
+                            className="p-1 hover:text-rose-400 text-zinc-400"
+                            title="Cancel"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </form>
+                      ) : (
+                        <span className="truncate">{conv.title}</span>
+                      )}
+                    </div>
+
+                    {/* Actions on hover */}
+                    {!isEditingThis && (
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity ml-1 shrink-0">
+                        <button
+                          onClick={(e) => handleStartRename(conv, e)}
+                          className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-700/60 transition-colors"
+                          title="Rename chat"
+                        >
+                          <Edit2 className="w-3 h-3" />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onDeleteConversation(conv.id);
+                          }}
+                          className="p-1.5 rounded-lg text-zinc-400 hover:text-rose-400 hover:bg-zinc-700/60 transition-colors"
+                          title="Delete chat"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* Footer / Settings & Clear */}
+      <div className="p-3 border-t border-zinc-800 bg-zinc-950/80 space-y-1 text-xs">
+        {conversations.length > 0 && (
+          <button
+            onClick={onOpenClearModal}
+            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-zinc-400 hover:text-rose-400 hover:bg-rose-950/20 transition-colors cursor-pointer"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            <span>Clear conversation history</span>
+          </button>
+        )}
+
+        <button
+          onClick={onOpenSettings}
+          className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors cursor-pointer"
+        >
+          <div className="flex items-center gap-2.5">
+            <Settings className="w-3.5 h-3.5" />
+            <span>AI Settings & Persona</span>
+          </div>
+          <span className="text-[10px] text-zinc-500 font-mono">v1.2</span>
+        </button>
+      </div>
+    </div>
+  );
+
+  return (
+    <>
+      {/* Desktop Sidebar */}
+      <aside
+        className={`hidden md:block transition-all duration-300 relative z-20 shrink-0 ${
+          isOpen ? 'w-72' : 'w-0'
+        }`}
+      >
+        <div
+          className={`h-full overflow-hidden transition-all duration-300 ${
+            isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
+          }`}
+        >
+          {sidebarContent}
+        </div>
       </aside>
+
+      {/* Mobile Drawer */}
+      {isMobileOpen && (
+        <div className="fixed inset-0 z-50 md:hidden flex">
+          <div
+            className="fixed inset-0 bg-black/60 backdrop-blur-xs transition-opacity"
+            onClick={onCloseMobile}
+          />
+          <div className="relative z-10 h-full shadow-2xl flex flex-col animate-in slide-in-from-left duration-200">
+            {sidebarContent}
+          </div>
+        </div>
+      )}
     </>
   );
 };

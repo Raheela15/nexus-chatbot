@@ -1,146 +1,205 @@
 import React, { useState } from 'react';
-import { X, Sparkles, Sliders, Download, Upload, Trash2, Check } from 'lucide-react';
-import { Conversation, PRESET_PERSONAS } from '../types/chat';
+import { X, Sparkles, Sliders, Keyboard, ShieldCheck, RefreshCw } from 'lucide-react';
+import { Settings } from '../types/chat';
 
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
-  activeConversation: Conversation | null;
-  onUpdateSystemInstruction: (instruction: string) => void;
-  onClearAll: () => void;
-  onExport: () => void;
-  onImport: () => void;
+  settings: Settings;
+  onSaveSettings: (settings: Settings) => void;
 }
+
+const PERSONA_PRESETS = [
+  {
+    name: 'Helpful & Balanced',
+    prompt:
+      'You are an intelligent, thoughtful, and articulate AI assistant powered by Google Gemini. Provide direct, helpful, well-structured answers using markdown formatting and clean code snippets when useful.',
+  },
+  {
+    name: 'Senior Software Engineer',
+    prompt:
+      'You are a senior full-stack software engineer and architect with 10+ years of industry experience. Focus on modern clean code, production design patterns, performance optimizations, robust typing, and practical architecture. Keep explanations sharp and actionable.',
+  },
+  {
+    name: 'Concise & Direct',
+    prompt:
+      'You are an ultra-concise assistant. Answer queries directly without conversational filler, pleasantries, or preamble. Keep code examples tight and to the point.',
+  },
+  {
+    name: 'Patient Tutor',
+    prompt:
+      'You are an encouraging, patient tutor. Explain concepts clearly using step-by-step reasoning, intuitive real-world metaphors, and helpful summaries.',
+  },
+];
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
   isOpen,
   onClose,
-  activeConversation,
-  onUpdateSystemInstruction,
-  onClearAll,
-  onExport,
-  onImport,
+  settings,
+  onSaveSettings,
 }) => {
-  const [instruction, setInstruction] = useState(
-    activeConversation?.systemInstruction || PRESET_PERSONAS[0].systemInstruction
-  );
-  const [saved, setSaved] = useState(false);
+  const [currentSettings, setCurrentSettings] = useState<Settings>(settings);
 
   if (!isOpen) return null;
 
+  const handleApplyPreset = (prompt: string) => {
+    setCurrentSettings((prev) => ({ ...prev, systemInstruction: prompt }));
+  };
+
   const handleSave = () => {
-    onUpdateSystemInstruction(instruction);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    onSaveSettings(currentSettings);
+    onClose();
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-      <div className="w-full max-w-lg bg-[#18181b] border border-[#27272a] rounded-2xl shadow-2xl overflow-hidden flex flex-col">
-        {/* Modal Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-[#27272a]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+      <div
+        className="w-full max-w-lg rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-200"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-200 dark:border-zinc-800">
           <div className="flex items-center gap-2">
-            <Sliders className="w-4 h-4 text-[#818cf8]" />
-            <h3 className="font-semibold text-sm text-[#f4f4f5]">Chatbot Settings</h3>
+            <div className="p-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400">
+              <Sliders className="w-4 h-4" />
+            </div>
+            <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
+              Chatbot Settings & Persona
+            </h2>
           </div>
           <button
             onClick={onClose}
-            className="p-1 rounded-lg text-[#a1a1aa] hover:text-white hover:bg-[#27272a]"
+            className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Modal Content */}
-        <div className="p-5 space-y-5 overflow-y-auto max-h-[75vh]">
-          {/* Active Model Info */}
-          <div className="p-3.5 rounded-xl bg-[#121215] border border-[#27272a] flex items-center justify-between">
-            <div>
-              <div className="text-xs font-semibold text-[#f4f4f5] flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-[#6366f1]" />
-                <span>Google Gemini 3.8 Flash</span>
-              </div>
-              <p className="text-[11px] text-[#71717a] mt-0.5">
-                Low-latency, multimodal intelligence via official GenAI SDK
-              </p>
-            </div>
-            <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-emerald-950/60 text-emerald-400 border border-emerald-800/50">
-              Active
-            </span>
-          </div>
-
-          {/* System Instruction */}
+        {/* Body */}
+        <div className="p-5 space-y-5 overflow-y-auto">
+          {/* Free Tier Model Selection */}
           <div className="space-y-2">
-            <label className="block text-xs font-semibold text-[#c7c4d7]">
-              System Instruction for Current Conversation
+            <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 uppercase tracking-wider">
+              Default Gemini Model
             </label>
-            <p className="text-[11px] text-[#71717a]">
-              Direct how Gemini should behave, structure responses, and tailor its answers.
-            </p>
-            <textarea
-              rows={4}
-              value={instruction}
-              onChange={(e) => setInstruction(e.target.value)}
-              className="w-full bg-[#121215] border border-[#27272a] focus:border-[#6366f1] rounded-xl p-3 text-xs text-[#f4f4f5] placeholder-[#71717a] resize-none focus:outline-none"
-              placeholder="e.g. You are a helpful assistant..."
-            />
-            <div className="flex justify-end">
-              <button
-                type="button"
-                onClick={handleSave}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#6366f1] hover:bg-[#4f46e5] text-white text-xs font-medium transition-colors"
-              >
-                {saved ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : null}
-                <span>{saved ? 'Saved!' : 'Save System Instruction'}</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Data Management Section */}
-          <div className="pt-3 border-t border-[#27272a] space-y-3">
-            <div className="text-xs font-semibold text-[#c7c4d7]">Data & Local Storage</div>
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
-                onClick={onExport}
-                className="flex items-center justify-center gap-2 p-2.5 rounded-xl bg-[#121215] border border-[#27272a] hover:bg-[#27272a] text-xs text-[#f4f4f5] transition-colors"
+                onClick={() =>
+                  setCurrentSettings((s) => ({ ...s, defaultModel: 'gemini-3.8-flash' }))
+                }
+                className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                  currentSettings.defaultModel === 'gemini-3.8-flash'
+                    ? 'border-indigo-500 bg-indigo-50/50 dark:bg-indigo-950/30 text-indigo-900 dark:text-indigo-200 ring-1 ring-indigo-500'
+                    : 'border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-850 text-zinc-700 dark:text-zinc-300'
+                }`}
               >
-                <Download className="w-3.5 h-3.5 text-[#818cf8]" />
-                <span>Export History</span>
+                <div className="font-medium text-xs">Gemini 3.8 Flash</div>
+                <div className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">
+                  Fast & intelligent (Recommended)
+                </div>
               </button>
+
               <button
                 type="button"
-                onClick={onImport}
-                className="flex items-center justify-center gap-2 p-2.5 rounded-xl bg-[#121215] border border-[#27272a] hover:bg-[#27272a] text-xs text-[#f4f4f5] transition-colors"
+                onClick={() =>
+                  setCurrentSettings((s) => ({ ...s, defaultModel: 'gemini-3.1-flash-lite' }))
+                }
+                className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                  currentSettings.defaultModel === 'gemini-3.1-flash-lite'
+                    ? 'border-indigo-500 bg-indigo-50/50 dark:bg-indigo-950/30 text-indigo-900 dark:text-indigo-200 ring-1 ring-indigo-500'
+                    : 'border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-850 text-zinc-700 dark:text-zinc-300'
+                }`}
               >
-                <Upload className="w-3.5 h-3.5 text-[#818cf8]" />
-                <span>Import Backup</span>
+                <div className="font-medium text-xs">Gemini 3.1 Flash Lite</div>
+                <div className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">
+                  Ultra-low latency free tier
+                </div>
               </button>
             </div>
+          </div>
 
-            <button
-              type="button"
-              onClick={() => {
-                if (window.confirm('Are you sure you want to delete all saved conversations? This cannot be undone.')) {
-                  onClearAll();
-                  onClose();
-                }
-              }}
-              className="w-full flex items-center justify-center gap-2 p-2.5 rounded-xl bg-red-950/20 border border-red-900/30 hover:bg-red-950/40 text-xs text-red-400 transition-colors"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-              <span>Delete All Saved Chats</span>
-            </button>
+          {/* System Persona / Instruction */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 uppercase tracking-wider">
+                System Instruction / AI Persona
+              </label>
+              <span className="text-[11px] text-zinc-400">Customizes tone & behavior</span>
+            </div>
+
+            {/* Persona chips */}
+            <div className="flex flex-wrap gap-1.5">
+              {PERSONA_PRESETS.map((p) => (
+                <button
+                  key={p.name}
+                  type="button"
+                  onClick={() => handleApplyPreset(p.prompt)}
+                  className="px-2.5 py-1 rounded-lg text-xs font-medium bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 hover:text-indigo-600 dark:hover:text-indigo-400 border border-zinc-200/60 dark:border-zinc-700/60 transition-colors cursor-pointer"
+                >
+                  {p.name}
+                </button>
+              ))}
+            </div>
+
+            <textarea
+              value={currentSettings.systemInstruction}
+              onChange={(e) =>
+                setCurrentSettings((s) => ({ ...s, systemInstruction: e.target.value }))
+              }
+              rows={4}
+              className="w-full p-3 text-xs sm:text-sm rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+              placeholder="Provide system instructions for the AI..."
+            />
+          </div>
+
+          {/* Keyboard shortcuts */}
+          <div className="p-3.5 rounded-xl bg-zinc-100/70 dark:bg-zinc-800/50 border border-zinc-200/60 dark:border-zinc-700/40 space-y-2">
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-zinc-800 dark:text-zinc-200">
+              <Keyboard className="w-3.5 h-3.5 text-zinc-500" />
+              <span>Keyboard Shortcuts</span>
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-xs text-zinc-600 dark:text-zinc-400">
+              <div className="flex justify-between items-center pr-2">
+                <span>Send message</span>
+                <kbd className="px-1.5 py-0.5 rounded bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 text-[10px] font-mono shadow-2xs">
+                  Enter
+                </kbd>
+              </div>
+              <div className="flex justify-between items-center pr-2">
+                <span>New line</span>
+                <kbd className="px-1.5 py-0.5 rounded bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 text-[10px] font-mono shadow-2xs">
+                  Shift+Enter
+                </kbd>
+              </div>
+            </div>
+          </div>
+
+          {/* Security & API Status */}
+          <div className="flex items-start gap-2.5 p-3 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200/60 dark:border-emerald-900/40 text-emerald-800 dark:text-emerald-300 text-xs">
+            <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-medium">Secure Server-Side Architecture</p>
+              <p className="text-[11px] text-emerald-700 dark:text-emerald-400/90 mt-0.5 leading-relaxed">
+                Your Google Gemini API credentials are processed server-side through protected endpoints and never exposed to the client.
+              </p>
+            </div>
           </div>
         </div>
 
-        {/* Modal Footer */}
-        <div className="px-5 py-3 border-t border-[#27272a] bg-[#121215] flex justify-end">
+        {/* Footer */}
+        <div className="flex items-center justify-end gap-2 px-5 py-3.5 bg-zinc-50 dark:bg-zinc-950 border-t border-zinc-200 dark:border-zinc-800">
           <button
             onClick={onClose}
-            className="px-4 py-2 rounded-xl text-xs font-medium bg-[#27272a] hover:bg-[#3f3f46] text-[#f4f4f5] transition-colors"
+            className="px-4 py-2 rounded-xl text-xs font-medium text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200/60 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
           >
-            Close
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            className="px-4 py-2 rounded-xl text-xs font-medium bg-indigo-600 hover:bg-indigo-500 text-white shadow-sm transition-colors cursor-pointer"
+          >
+            Save Changes
           </button>
         </div>
       </div>

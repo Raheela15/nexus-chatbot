@@ -1,208 +1,214 @@
-import { Conversation, Message, PRESET_PERSONAS } from '../types/chat';
+import { Conversation, Message, Settings } from '../types/chat';
 
-const STORAGE_KEY = 'synthetix_conversations_v1';
-const ACTIVE_CONV_KEY = 'synthetix_active_conv_id';
+const STORAGE_KEYS = {
+  CONVERSATIONS: 'gemini_chat_conversations_v1',
+  ACTIVE_ID: 'gemini_chat_active_id_v1',
+  SETTINGS: 'gemini_chat_settings_v1',
+  THEME: 'gemini_chat_theme_v1',
+};
 
-/**
- * Generate a random UUID-like ID
- */
+export const DEFAULT_SETTINGS: Settings = {
+  defaultModel: 'gemini-3.1-flash-lite',
+  systemInstruction: 'You are an intelligent, thoughtful, and articulate AI assistant powered by Google Gemini. Provide direct, helpful, well-structured answers using markdown formatting and clean code snippets when useful.',
+  autoScroll: true,
+  soundEnabled: false,
+};
+
 export function generateId(): string {
-  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-    return crypto.randomUUID();
-  }
-  return 'conv_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 9);
+  return `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 }
 
-/**
- * Load all conversations from LocalStorage
- */
-export function loadConversations(): Conversation[] {
+export function generateConversationTitle(firstMessage: string): string {
+  const clean = firstMessage.replace(/[\r\n]+/g, ' ').trim();
+  if (clean.length <= 40) return clean || 'New Conversation';
+  return clean.slice(0, 38) + '...';
+}
+
+// Conversation CRUD
+export function getSavedConversations(): Conversation[] {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(STORAGE_KEYS.CONVERSATIONS);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed)) {
-      return parsed;
+      return parsed.sort((a, b) => b.updatedAt - a.updatedAt);
     }
     return [];
-  } catch (err) {
-    console.error('Failed to load conversations from localStorage:', err);
+  } catch (e) {
+    console.error('Failed to load conversations from local storage:', e);
     return [];
   }
 }
 
-/**
- * Save all conversations to LocalStorage
- */
 export function saveConversations(conversations: Conversation[]): void {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(conversations));
-  } catch (err) {
-    console.error('Failed to save conversations to localStorage:', err);
+    localStorage.setItem(STORAGE_KEYS.CONVERSATIONS, JSON.stringify(conversations));
+  } catch (e) {
+    console.error('Failed to save conversations to local storage:', e);
   }
 }
 
-/**
- * Get active conversation ID from LocalStorage
- */
 export function getActiveConversationId(): string | null {
   try {
-    return localStorage.getItem(ACTIVE_CONV_KEY);
+    return localStorage.getItem(STORAGE_KEYS.ACTIVE_ID);
   } catch {
     return null;
   }
 }
 
-/**
- * Set active conversation ID in LocalStorage
- */
-export function setActiveConversationId(id: string): void {
+export function setActiveConversationId(id: string | null): void {
   try {
-    localStorage.setItem(ACTIVE_CONV_KEY, id);
-  } catch (err) {
-    console.error('Failed to set active conversation ID:', err);
+    if (id) {
+      localStorage.setItem(STORAGE_KEYS.ACTIVE_ID, id);
+    } else {
+      localStorage.removeItem(STORAGE_KEYS.ACTIVE_ID);
+    }
+  } catch {
+    // Ignore error
   }
 }
 
-/**
- * Create a new conversation (CRUD: Create)
- */
-export function createNewConversation(
-  title = 'New Chat',
-  personaId = 'general',
-  initialMessage?: Message
-): Conversation {
-  const persona = PRESET_PERSONAS.find((p) => p.id === personaId) || PRESET_PERSONAS[0];
+export function createNewConversation(title = 'New Chat', initialMessages: Message[] = []): Conversation {
   const now = Date.now();
-  const newConv: Conversation = {
+  const conv: Conversation = {
     id: generateId(),
     title,
     createdAt: now,
     updatedAt: now,
-    messages: initialMessage ? [initialMessage] : [],
-    personaId: persona.id,
-    systemInstruction: persona.systemInstruction,
-    model: 'gemini-3.1-flash-lite',
+    messages: initialMessages,
+    model: 'gemini-3.8-flash',
   };
 
-  const list = loadConversations();
-  const updated = [newConv, ...list];
+  const list = getSavedConversations();
+  const updated = [conv, ...list];
   saveConversations(updated);
-  setActiveConversationId(newConv.id);
-  return newConv;
+  setActiveConversationId(conv.id);
+  return conv;
 }
 
-/**
- * Update an existing conversation (CRUD: Update)
- */
-export function updateConversation(
-  id: string,
-  updater: Partial<Conversation> | ((prev: Conversation) => Conversation)
-): Conversation | null {
-  const list = loadConversations();
-  const index = list.findIndex((c) => c.id === id);
-  if (index === -1) return null;
-
-  const current = list[index];
-  const updated =
-    typeof updater === 'function' ? updater(current) : { ...current, ...updater, updatedAt: Date.now() };
-
-  list[index] = updated;
-  saveConversations(list);
+export function updateConversationTitle(id: string, newTitle: string): Conversation[] {
+  const list = getSavedConversations();
+  const updated = list.map((c) =>
+    c.id === id ? { ...c, title: newTitle.trim() || 'Untitled Chat', updatedAt: Date.now() } : c
+  );
+  saveConversations(updated);
   return updated;
 }
 
-/**
- * Rename a conversation (CRUD: Update Title)
- */
-export function renameConversation(id: string, newTitle: string): boolean {
-  const trimmed = newTitle.trim();
-  if (!trimmed) return false;
-  const result = updateConversation(id, { title: trimmed });
-  return !!result;
-}
-
-/**
- * Delete a conversation by ID (CRUD: Delete)
- */
-export function deleteConversation(id: string): Conversation[] {
-  const list = loadConversations();
-  const filtered = list.filter((c) => c.id !== id);
-  saveConversations(filtered);
+export function deleteConversationById(id: string): Conversation[] {
+  const list = getSavedConversations();
+  const updated = list.filter((c) => c.id !== id);
+  saveConversations(updated);
 
   const activeId = getActiveConversationId();
   if (activeId === id) {
-    if (filtered.length > 0) {
-      setActiveConversationId(filtered[0].id);
-    } else {
-      localStorage.removeItem(ACTIVE_CONV_KEY);
-    }
+    const nextActive = updated.length > 0 ? updated[0].id : null;
+    setActiveConversationId(nextActive);
   }
 
-  return filtered;
+  return updated;
 }
 
-/**
- * Clear all conversations (CRUD: Delete All)
- */
 export function clearAllConversations(): void {
   try {
-    localStorage.removeItem(STORAGE_KEY);
-    localStorage.removeItem(ACTIVE_CONV_KEY);
-  } catch (err) {
-    console.error('Failed to clear conversations:', err);
+    localStorage.removeItem(STORAGE_KEYS.CONVERSATIONS);
+    localStorage.removeItem(STORAGE_KEYS.ACTIVE_ID);
+  } catch (e) {
+    console.error('Failed to clear conversations:', e);
   }
 }
 
-/**
- * Export conversation data as JSON string
- */
-export function exportAllData(): string {
-  const data = {
-    app: 'Synthetix AI Chatbot',
-    exportedAt: new Date().toISOString(),
-    conversations: loadConversations(),
-  };
-  return JSON.stringify(data, null, 2);
-}
+// Message CRUD
+export function appendMessage(conversationId: string, message: Message): Conversation[] {
+  const list = getSavedConversations();
+  let found = false;
+  const now = Date.now();
 
-/**
- * Import conversations from JSON string
- */
-export function importData(jsonString: string): boolean {
-  try {
-    const data = JSON.parse(jsonString);
-    if (data && Array.isArray(data.conversations)) {
-      const existing = loadConversations();
-      // Deduplicate by ID
-      const map = new Map<string, Conversation>();
-      for (const item of existing) {
-        map.set(item.id, item);
+  const updated = list.map((c) => {
+    if (c.id === conversationId) {
+      found = true;
+      let newTitle = c.title;
+      // If it was default title and this is the first user message, generate title
+      if ((c.title === 'New Chat' || c.title === 'New Conversation') && message.role === 'user') {
+        newTitle = generateConversationTitle(message.content);
       }
-      for (const item of data.conversations) {
-        if (item.id && item.title && Array.isArray(item.messages)) {
-          map.set(item.id, item);
-        }
-      }
-      const merged = Array.from(map.values()).sort((a, b) => b.updatedAt - a.updatedAt);
-      saveConversations(merged);
-      if (merged.length > 0 && !getActiveConversationId()) {
-        setActiveConversationId(merged[0].id);
-      }
-      return true;
+      return {
+        ...c,
+        title: newTitle,
+        updatedAt: now,
+        messages: [...c.messages, message],
+      };
     }
-    return false;
-  } catch (err) {
-    console.error('Failed to parse import JSON:', err);
-    return false;
+    return c;
+  });
+
+  if (!found) {
+    const newConv: Conversation = {
+      id: conversationId,
+      title: message.role === 'user' ? generateConversationTitle(message.content) : 'New Chat',
+      createdAt: now,
+      updatedAt: now,
+      messages: [message],
+      model: 'gemini-3.8-flash',
+    };
+    const nextList = [newConv, ...list];
+    saveConversations(nextList);
+    return nextList;
+  }
+
+  saveConversations(updated);
+  return updated;
+}
+
+export function updateMessage(conversationId: string, messageId: string, newContent: string): Conversation[] {
+  const list = getSavedConversations();
+  const updated = list.map((c) => {
+    if (c.id === conversationId) {
+      return {
+        ...c,
+        updatedAt: Date.now(),
+        messages: c.messages.map((m) =>
+          m.id === messageId ? { ...m, content: newContent, status: 'complete' as const } : m
+        ),
+      };
+    }
+    return c;
+  });
+  saveConversations(updated);
+  return updated;
+}
+
+export function deleteMessage(conversationId: string, messageId: string): Conversation[] {
+  const list = getSavedConversations();
+  const updated = list.map((c) => {
+    if (c.id === conversationId) {
+      return {
+        ...c,
+        updatedAt: Date.now(),
+        messages: c.messages.filter((m) => m.id !== messageId),
+      };
+    }
+    return c;
+  });
+  saveConversations(updated);
+  return updated;
+}
+
+// Settings
+export function loadSettings(): Settings {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.SETTINGS);
+    if (!raw) return DEFAULT_SETTINGS;
+    return { ...DEFAULT_SETTINGS, ...JSON.parse(raw) };
+  } catch {
+    return DEFAULT_SETTINGS;
   }
 }
 
-/**
- * Generate a smart title from the user's first prompt
- */
-export function generateTitleFromPrompt(prompt: string): string {
-  const clean = prompt.trim().replace(/^["']|["']$/g, '');
-  if (clean.length <= 36) return clean;
-  return clean.slice(0, 36) + '...';
+export function saveSettings(settings: Settings): void {
+  try {
+    localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
+  } catch (e) {
+    console.error('Failed to save settings:', e);
+  }
 }

@@ -1,255 +1,99 @@
 import React from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { CodeBlock } from './CodeBlock';
 
 interface MarkdownRendererProps {
   content: string;
 }
 
-export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content }) => {
-  // Split content by code blocks ```lang ... ```
-  // Regex preserves code blocks and markdown prose
-  const codeBlockRegex = /```([a-zA-Z0-9_-]*)\n([\s\S]*?)```/g;
-
-  const parts: React.ReactNode[] = [];
-  let lastIndex = 0;
-  let match: RegExpExecArray | null;
-
-  while ((match = codeBlockRegex.exec(content)) !== null) {
-    const matchStart = match.index;
-    const matchEnd = matchStart + match[0].length;
-
-    // Push prose before this code block
-    if (matchStart > lastIndex) {
-      const prose = content.substring(lastIndex, matchStart);
-      parts.push(renderProse(prose, `prose-${lastIndex}`));
-    }
-
-    const language = match[1] || 'text';
-    const code = match[2];
-    parts.push(
-      <CodeBlock key={`code-${matchStart}`} language={language} code={code} />
-    );
-
-    lastIndex = matchEnd;
-  }
-
-  // Push remaining prose
-  if (lastIndex < content.length) {
-    const remainingProse = content.substring(lastIndex);
-    parts.push(renderProse(remainingProse, `prose-${lastIndex}`));
-  }
-
-  return <div className="space-y-3 leading-relaxed text-[#f4f4f5]">{parts}</div>;
-};
-
-/**
- * Render standard markdown prose paragraphs, lists, headers, quotes, and inline styles
- */
-function renderProse(rawText: string, keyPrefix: string): React.ReactNode {
-  const blocks = rawText.split(/\n{2,}/);
-
+export const MarkdownRenderer: React.FC<MarkdownRendererProps> = React.memo(({ content }) => {
   return (
-    <div key={keyPrefix} className="space-y-3">
-      {blocks.map((block, bIdx) => {
-        const trimmed = block.trim();
-        if (!trimmed) return null;
+    <div className="text-zinc-800 dark:text-zinc-200 text-[15px] leading-relaxed break-words space-y-3">
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={{
+          code({ inline, className, children, ...props }: any) {
+            const match = /language-(\w+)/.exec(className || '');
+            const value = String(children).replace(/\n$/, '');
 
-        // Headers
-        if (trimmed.startsWith('# ')) {
-          return (
-            <h1 key={`${keyPrefix}-h1-${bIdx}`} className="text-2xl font-bold text-[#f4f4f5] tracking-tight mt-4 mb-2">
-              {formatInline(trimmed.replace(/^#\s+/, ''))}
+            if (!inline && (match || value.includes('\n'))) {
+              return <CodeBlock language={match ? match[1] : 'text'} value={value} />;
+            }
+
+            return (
+              <code
+                className="px-1.5 py-0.5 mx-0.5 rounded-md text-xs font-mono font-medium bg-zinc-200/70 dark:bg-zinc-800/80 text-indigo-700 dark:text-indigo-300 border border-zinc-300/40 dark:border-zinc-700/50"
+                {...props}
+              >
+                {children}
+              </code>
+            );
+          },
+          h1: ({ children }) => (
+            <h1 className="text-xl sm:text-2xl font-bold text-zinc-900 dark:text-zinc-100 mt-5 mb-2 pb-1.5 border-b border-zinc-200 dark:border-zinc-800 tracking-tight">
+              {children}
             </h1>
-          );
-        }
-        if (trimmed.startsWith('## ')) {
-          return (
-            <h2 key={`${keyPrefix}-h2-${bIdx}`} className="text-xl font-semibold text-[#f4f4f5] tracking-tight mt-3 mb-2">
-              {formatInline(trimmed.replace(/^##\s+/, ''))}
+          ),
+          h2: ({ children }) => (
+            <h2 className="text-lg sm:text-xl font-semibold text-zinc-900 dark:text-zinc-100 mt-4 mb-2 pb-1 border-b border-zinc-200/70 dark:border-zinc-800/70 tracking-tight">
+              {children}
             </h2>
-          );
-        }
-        if (trimmed.startsWith('### ')) {
-          return (
-            <h3 key={`${keyPrefix}-h3-${bIdx}`} className="text-lg font-semibold text-[#c7c4d7] mt-3 mb-1">
-              {formatInline(trimmed.replace(/^###\s+/, ''))}
+          ),
+          h3: ({ children }) => (
+            <h3 className="text-base sm:text-lg font-semibold text-zinc-900 dark:text-zinc-100 mt-3 mb-1.5 tracking-tight">
+              {children}
             </h3>
-          );
-        }
-        if (trimmed.startsWith('#### ')) {
-          return (
-            <h4 key={`${keyPrefix}-h4-${bIdx}`} className="text-base font-semibold text-[#c7c4d7] mt-2 mb-1">
-              {formatInline(trimmed.replace(/^####\s+/, ''))}
-            </h4>
-          );
-        }
-
-        // Blockquotes
-        if (trimmed.startsWith('>')) {
-          const quoteLines = trimmed
-            .split('\n')
-            .map((l) => l.replace(/^>\s?/, ''))
-            .join(' ');
-          return (
-            <blockquote
-              key={`${keyPrefix}-quote-${bIdx}`}
-              className="border-l-2 border-[#6366f1] pl-4 py-1 italic text-[#a1a1aa] bg-[#18181b]/40 rounded-r-lg my-2"
-            >
-              {formatInline(quoteLines)}
+          ),
+          p: ({ children }) => <p className="mb-3 last:mb-0 leading-relaxed">{children}</p>,
+          ul: ({ children }) => (
+            <ul className="list-disc list-outside pl-5 mb-3 space-y-1">{children}</ul>
+          ),
+          ol: ({ children }) => (
+            <ol className="list-decimal list-outside pl-5 mb-3 space-y-1">{children}</ol>
+          ),
+          li: ({ children }) => <li className="leading-relaxed">{children}</li>,
+          blockquote: ({ children }) => (
+            <blockquote className="border-l-4 border-indigo-500/60 pl-4 py-1 italic my-3 text-zinc-600 dark:text-zinc-400 bg-indigo-50/30 dark:bg-indigo-950/20 rounded-r-lg">
+              {children}
             </blockquote>
-          );
-        }
-
-        // Unordered lists (lines starting with - or * )
-        const lines = trimmed.split('\n');
-        const isBulletList = lines.every((l) => /^\s*[-*]\s+/.test(l));
-        if (isBulletList) {
-          return (
-            <ul key={`${keyPrefix}-ul-${bIdx}`} className="list-disc list-inside space-y-1.5 my-2 pl-2">
-              {lines.map((l, lIdx) => (
-                <li key={lIdx} className="text-[#f4f4f5] marker:text-[#818cf8]">
-                  {formatInline(l.replace(/^\s*[-*]\s+/, ''))}
-                </li>
-              ))}
-            </ul>
-          );
-        }
-
-        // Numbered lists (lines starting with 1. 2. etc)
-        const isNumberedList = lines.every((l) => /^\s*\d+\.\s+/.test(l));
-        if (isNumberedList) {
-          return (
-            <ol key={`${keyPrefix}-ol-${bIdx}`} className="list-decimal list-inside space-y-1.5 my-2 pl-2">
-              {lines.map((l, lIdx) => (
-                <li key={lIdx} className="text-[#f4f4f5] marker:text-[#818cf8] marker:font-semibold">
-                  {formatInline(l.replace(/^\s*\d+\.\s+/, ''))}
-                </li>
-              ))}
-            </ol>
-          );
-        }
-
-        // Check for Markdown table
-        if (lines.length >= 2 && lines[0].includes('|') && lines[1].includes('|') && lines[1].includes('-')) {
-          const headerCols = lines[0]
-            .split('|')
-            .map((c) => c.trim())
-            .filter((_, idx, arr) => idx > 0 && idx < arr.length - (lines[0].endsWith('|') ? 1 : 0));
-          const rowLines = lines.slice(2);
-
-          return (
-            <div key={`${keyPrefix}-table-${bIdx}`} className="my-3 overflow-x-auto rounded-lg border border-[#27272a]">
-              <table className="w-full text-left text-sm border-collapse">
-                <thead className="bg-[#18181b] border-b border-[#27272a] text-[#c7c4d7]">
-                  <tr>
-                    {headerCols.map((col, cIdx) => (
-                      <th key={cIdx} className="px-4 py-2.5 font-semibold text-xs tracking-wider uppercase font-mono">
-                        {formatInline(col)}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#27272a]/60 bg-[#121215]">
-                  {rowLines.map((row, rIdx) => {
-                    const cells = row
-                      .split('|')
-                      .map((c) => c.trim())
-                      .filter((_, idx, arr) => idx > 0 && idx < arr.length - (row.endsWith('|') ? 1 : 0));
-                    return (
-                      <tr key={rIdx} className="hover:bg-[#18181b]/50 transition-colors">
-                        {cells.map((cell, cellIdx) => (
-                          <td key={cellIdx} className="px-4 py-2.5 text-[#f4f4f5]">
-                            {formatInline(cell)}
-                          </td>
-                        ))}
-                      </tr>
-                    );
-                  })}
-                </tbody>
+          ),
+          table: ({ children }) => (
+            <div className="overflow-x-auto my-4 rounded-lg border border-zinc-200 dark:border-zinc-800 shadow-xs">
+              <table className="min-w-full divide-y divide-zinc-200 dark:divide-zinc-800 text-left text-sm">
+                {children}
               </table>
             </div>
-          );
-        }
-
-        // Regular paragraph with soft breaks preserved
-        return (
-          <p key={`${keyPrefix}-p-${bIdx}`} className="leading-relaxed">
-            {lines.map((line, lIdx) => (
-              <React.Fragment key={lIdx}>
-                {formatInline(line)}
-                {lIdx < lines.length - 1 && <br />}
-              </React.Fragment>
-            ))}
-          </p>
-        );
-      })}
+          ),
+          thead: ({ children }) => (
+            <thead className="bg-zinc-100/90 dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 font-semibold uppercase text-xs tracking-wider">
+              {children}
+            </thead>
+          ),
+          tbody: ({ children }) => (
+            <tbody className="divide-y divide-zinc-200/80 dark:divide-zinc-800/80 bg-white/50 dark:bg-zinc-950/40">
+              {children}
+            </tbody>
+          ),
+          th: ({ children }) => <th className="px-4 py-2.5 font-semibold">{children}</th>,
+          td: ({ children }) => <td className="px-4 py-2.5 text-sm">{children}</td>,
+          hr: () => <hr className="my-5 border-zinc-200 dark:border-zinc-800" />,
+          a: ({ href, children }) => (
+            <a
+              href={href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-indigo-600 dark:text-indigo-400 underline underline-offset-2 hover:text-indigo-700 dark:hover:text-indigo-300 font-medium"
+            >
+              {children}
+            </a>
+          ),
+        }}
+      >
+        {content}
+      </ReactMarkdown>
     </div>
   );
-}
+});
 
-/**
- * Format inline elements: bold (**), italic (*), inline code (`), and links ([text](url))
- */
-function formatInline(text: string): React.ReactNode[] {
-  // Regex for inline code, links, bold, and italic
-  const inlineRegex = /(`[^`]+`)|(\[[^\]]+\]\([^)]+\))|(\*\*[^*]+\*\*)|(\*[^*]+\*)/g;
-  const elements: React.ReactNode[] = [];
-  let lastIndex = 0;
-  let match: RegExpExecArray | null;
-
-  while ((match = inlineRegex.exec(text)) !== null) {
-    if (match.index > lastIndex) {
-      elements.push(text.substring(lastIndex, match.index));
-    }
-
-    const token = match[0];
-    if (token.startsWith('`') && token.endsWith('`')) {
-      const code = token.slice(1, -1);
-      elements.push(
-        <code
-          key={match.index}
-          className="px-1.5 py-0.5 rounded-md bg-[#27272a] text-[#c0c1ff] font-mono text-[13px] border border-[#3f3f46]/40"
-        >
-          {code}
-        </code>
-      );
-    } else if (token.startsWith('[') && token.includes('](')) {
-      const linkMatch = token.match(/\[([^\]]+)\]\(([^)]+)\)/);
-      if (linkMatch) {
-        elements.push(
-          <a
-            key={match.index}
-            href={linkMatch[2]}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-[#818cf8] underline underline-offset-2 hover:text-[#c0c1ff] transition-colors"
-          >
-            {linkMatch[1]}
-          </a>
-        );
-      } else {
-        elements.push(token);
-      }
-    } else if (token.startsWith('**') && token.endsWith('**')) {
-      elements.push(
-        <strong key={match.index} className="font-semibold text-white">
-          {token.slice(2, -2)}
-        </strong>
-      );
-    } else if (token.startsWith('*') && token.endsWith('*')) {
-      elements.push(
-        <em key={match.index} className="italic text-[#e4e1e6]">
-          {token.slice(1, -1)}
-        </em>
-      );
-    }
-
-    lastIndex = match.index + token.length;
-  }
-
-  if (lastIndex < text.length) {
-    elements.push(text.substring(lastIndex));
-  }
-
-  return elements.length > 0 ? elements : [text];
-}
+MarkdownRenderer.displayName = 'MarkdownRenderer';

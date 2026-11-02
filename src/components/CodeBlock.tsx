@@ -1,21 +1,30 @@
 import React, { useState } from 'react';
-import { Check, Copy, Terminal } from 'lucide-react';
+import { Check, Copy } from 'lucide-react';
+import Prism from 'prismjs';
+import 'prismjs/components/prism-javascript';
+import 'prismjs/components/prism-typescript';
+import 'prismjs/components/prism-jsx';
+import 'prismjs/components/prism-tsx';
+import 'prismjs/components/prism-python';
+import 'prismjs/components/prism-json';
+import 'prismjs/components/prism-bash';
+import 'prismjs/components/prism-markdown';
+import 'prismjs/components/prism-css';
+import 'prismjs/components/prism-sql';
 
 interface CodeBlockProps {
-  language: string;
-  code: string;
+  language?: string;
+  value: string;
 }
 
-export const CodeBlock: React.FC<CodeBlockProps> = ({ language, code }) => {
+export const CodeBlock: React.FC<CodeBlockProps> = ({ language = 'text', value }) => {
   const [copied, setCopied] = useState(false);
 
-  const cleanCode = code.replace(/\n$/, '');
-  const lines = cleanCode.split('\n');
-  const displayLang = language.trim().toLowerCase() || 'text';
+  const cleanLang = (language || 'text').toLowerCase().replace('language-', '');
 
   const handleCopy = async () => {
     try {
-      await navigator.clipboard.writeText(cleanCode);
+      await navigator.clipboard.writeText(value);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch (err) {
@@ -23,23 +32,36 @@ export const CodeBlock: React.FC<CodeBlockProps> = ({ language, code }) => {
     }
   };
 
+  const getHighlightedCode = () => {
+    try {
+      const grammar = Prism.languages[cleanLang] || Prism.languages.text;
+      if (grammar) {
+        return Prism.highlight(value, grammar, cleanLang);
+      }
+    } catch {
+      // fallback
+    }
+    return value;
+  };
+
   return (
-    <div className="my-4 rounded-xl overflow-hidden border border-[#27272a] bg-[#121215] shadow-lg shadow-black/40">
+    <div className="relative my-4 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-900 overflow-hidden shadow-sm text-zinc-100 text-sm">
       {/* Code Header Bar */}
-      <div className="flex items-center justify-between px-4 py-2 bg-[#18181b] border-b border-[#27272a] text-xs text-[#a1a1aa]">
-        <div className="flex items-center gap-2">
-          <Terminal className="w-3.5 h-3.5 text-[#818cf8]" />
-          <span className="font-mono uppercase tracking-wider font-semibold text-[#c7c4d7]">
-            {displayLang}
-          </span>
-          <span className="text-[#71717a]">•</span>
-          <span className="text-[#71717a] font-mono">{lines.length} {lines.length === 1 ? 'line' : 'lines'}</span>
+      <div className="flex items-center justify-between px-4 py-2 bg-zinc-950/80 border-b border-zinc-800 text-xs font-mono select-none">
+        <div className="flex items-center space-x-2">
+          <div className="flex space-x-1.5 mr-1">
+            <span className="w-2.5 h-2.5 rounded-full bg-rose-500/80 inline-block"></span>
+            <span className="w-2.5 h-2.5 rounded-full bg-amber-500/80 inline-block"></span>
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500/80 inline-block"></span>
+          </div>
+          <span className="text-zinc-400 font-medium capitalize tracking-wider">{cleanLang}</span>
         </div>
 
         <button
           onClick={handleCopy}
-          className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-[#27272a]/60 hover:bg-[#27272a] text-[#f4f4f5] transition-all duration-150 border border-transparent hover:border-[#3f3f46] focus:outline-none focus:ring-1 focus:ring-[#6366f1]"
-          title="Copy to clipboard"
+          className="flex items-center space-x-1.5 px-2.5 py-1 rounded-md text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/80 transition-colors cursor-pointer text-xs"
+          title="Copy code to clipboard"
+          type="button"
         >
           {copied ? (
             <>
@@ -48,29 +70,21 @@ export const CodeBlock: React.FC<CodeBlockProps> = ({ language, code }) => {
             </>
           ) : (
             <>
-              <Copy className="w-3.5 h-3.5 text-[#a1a1aa]" />
-              <span>Copy code</span>
+              <Copy className="w-3.5 h-3.5" />
+              <span>Copy</span>
             </>
           )}
         </button>
       </div>
 
-      {/* Code Content with Line Numbers */}
-      <div className="relative overflow-x-auto p-4 text-[13px] leading-6 font-mono selection:bg-[#6366f1]/30">
-        <table className="w-full border-collapse">
-          <tbody>
-            {lines.map((line, idx) => (
-              <tr key={idx} className="group hover:bg-[#18181b]/50 transition-colors">
-                <td className="w-8 pr-4 text-right select-none text-[#52525b] group-hover:text-[#a1a1aa] align-top text-xs font-mono">
-                  {idx + 1}
-                </td>
-                <td className="pl-2 pr-4 text-[#f4f4f5] whitespace-pre break-normal font-mono">
-                  {line || ' '}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      {/* Code Content */}
+      <div className="p-4 overflow-x-auto text-[13px] leading-relaxed font-mono">
+        <pre className="!bg-transparent !p-0 !m-0 !overflow-visible">
+          <code
+            className={`language-${cleanLang}`}
+            dangerouslySetInnerHTML={{ __html: getHighlightedCode() }}
+          />
+        </pre>
       </div>
     </div>
   );
